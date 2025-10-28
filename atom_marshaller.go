@@ -43,9 +43,13 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		return enc.WriteToken(jsontext.String(str))
 
 	case ast.BytesType:
-		// Bytes: JSON string with "#b" prefix + hex encoding
-		hexStr := "#b" + fmt.Sprintf("%x", []byte(cj.Symbol))
-		return enc.WriteToken(jsontext.String(hexStr))
+		// Bytes: JSON string with b"..." format matching String() output
+		escaped, err := ast.Escape(cj.Symbol, true /* isBytes */)
+		if err != nil {
+			return fmt.Errorf("failed to escape bytes: %w", err)
+		}
+		bytesStr := fmt.Sprintf(`b"%s"`, escaped)
+		return enc.WriteToken(jsontext.String(bytesStr))
 
 	case ast.NumberType:
 		// Numbers: JSON integer (e.g., 42)
@@ -80,8 +84,7 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		return enc.WriteToken(jsontext.EndArray)
 
 	case ast.PairShape:
-		// Pairs: ApplyFn with fn:pair(fst, snd)
-		// {"function": {"symbol": "fn:pair", "arity": 2}, "args": [fst, snd]}
+		// Pairs: {"fn:pair": [fst, snd]} - format matching String() semantics
 		fst, snd, err := cj.PairValue()
 		if err != nil {
 			return fmt.Errorf("failed to get pair value: %w", err)
@@ -89,33 +92,11 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 			return err
 		}
-		// Write "function" key
-		if err := enc.WriteToken(jsontext.String("function")); err != nil {
-			return err
-		}
-		// Write function object
-		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("symbol")); err != nil {
-			return err
-		}
+		// Write "fn:pair" key
 		if err := enc.WriteToken(jsontext.String("fn:pair")); err != nil {
 			return err
 		}
-		if err := enc.WriteToken(jsontext.String("arity")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(2)); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.EndObject); err != nil {
-			return err
-		}
-		// Write "args" key and array
-		if err := enc.WriteToken(jsontext.String("args")); err != nil {
-			return err
-		}
+		// Write args array
 		if err := enc.WriteToken(jsontext.BeginArray); err != nil {
 			return err
 		}
@@ -131,8 +112,7 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		return enc.WriteToken(jsontext.EndObject)
 
 	case ast.MapShape:
-		// Maps: ApplyFn with fn:map(key1, val1, key2, val2, ...)
-		// {"function": {"symbol": "fn:map", "arity": N}, "args": [key1, val1, ...]}
+		// Maps: {"fn:map": [key1, val1, key2, val2, ...]} - format matching String() semantics
 		// Collect all key-value pairs into a flat list
 		var args []ast.Constant
 		_, err := cj.MapValues(
@@ -145,38 +125,15 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		if err != nil {
 			return fmt.Errorf("failed to iterate map: %w", err)
 		}
-		arity := len(args) // Total number of arguments (keys + values)
 
 		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 			return err
 		}
-		// Write "function" key
-		if err := enc.WriteToken(jsontext.String("function")); err != nil {
-			return err
-		}
-		// Write function object
-		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("symbol")); err != nil {
-			return err
-		}
+		// Write "fn:map" key
 		if err := enc.WriteToken(jsontext.String("fn:map")); err != nil {
 			return err
 		}
-		if err := enc.WriteToken(jsontext.String("arity")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(arity))); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.EndObject); err != nil {
-			return err
-		}
-		// Write "args" key and array
-		if err := enc.WriteToken(jsontext.String("args")); err != nil {
-			return err
-		}
+		// Write args array
 		if err := enc.WriteToken(jsontext.BeginArray); err != nil {
 			return err
 		}
@@ -191,8 +148,8 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		return enc.WriteToken(jsontext.EndObject)
 
 	case ast.StructShape:
-		// Structs: ApplyFn with fn:struct(label1, val1, label2, val2, ...)
-		// {"function": {"symbol": "fn:struct", "arity": N}, "args": [label1, val1, ...]}
+		// Structs: {"fn:struct": [label1, val1, label2, val2, ...]} - format matching String() semantics
+		// Collect all label-value pairs into a flat list
 		var args []ast.Constant
 		_, err := cj.StructValues(
 			func(label, val ast.Constant) error {
@@ -204,38 +161,15 @@ func (cj constantJSON) MarshalJSONTo(enc *jsontext.Encoder) error {
 		if err != nil {
 			return fmt.Errorf("failed to iterate struct: %w", err)
 		}
-		arity := len(args) // Total number of arguments (labels + values)
 
 		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 			return err
 		}
-		// Write "function" key
-		if err := enc.WriteToken(jsontext.String("function")); err != nil {
-			return err
-		}
-		// Write function object
-		if err := enc.WriteToken(jsontext.BeginObject); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.String("symbol")); err != nil {
-			return err
-		}
+		// Write "fn:struct" key
 		if err := enc.WriteToken(jsontext.String("fn:struct")); err != nil {
 			return err
 		}
-		if err := enc.WriteToken(jsontext.String("arity")); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.Int(int64(arity))); err != nil {
-			return err
-		}
-		if err := enc.WriteToken(jsontext.EndObject); err != nil {
-			return err
-		}
-		// Write "args" key and array
-		if err := enc.WriteToken(jsontext.String("args")); err != nil {
-			return err
-		}
+		// Write args array
 		if err := enc.WriteToken(jsontext.BeginArray); err != nil {
 			return err
 		}
@@ -277,25 +211,21 @@ func (cj *constantJSON) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 				return fmt.Errorf("failed to create name from %q: %w", str, err)
 			}
 			cj.Constant = c
-		} else if len(str) > 2 && str[:2] == "#b" {
-			// Bytes: starts with "#b" followed by hex
-			hexStr := str[2:]
-			bytesData := make([]byte, len(hexStr)/2)
-			for i := 0; i < len(hexStr); i += 2 {
-				var b byte
-				_, err := fmt.Sscanf(hexStr[i:i+2], "%02x", &b)
-				if err != nil {
-					return fmt.Errorf("failed to decode hex bytes: %w", err)
-				}
-				bytesData[i/2] = b
+		} else if len(str) >= 3 && str[:2] == `b"` && str[len(str)-1] == '"' {
+			// Bytes: starts with b" and ends with " (e.g., b"..." or b"")
+			// Extract the escaped content between b" and "
+			escapedContent := str[2 : len(str)-1]
+			unescaped, err := ast.Unescape(escapedContent, true /* isBytes */)
+			if err != nil {
+				return fmt.Errorf("failed to unescape bytes: %w", err)
 			}
-			cj.Constant = ast.Bytes(bytesData)
+			cj.Constant = ast.Bytes([]byte(unescaped))
 		} else {
 			// String: regular string
 			cj.Constant = ast.String(str)
 		}
 
-	case '0', '-': // number (integer or float)
+	case '0': // number (integer or float)
 		if tok.Float() != float64(int64(tok.Float())) {
 			// Float
 			cj.Constant = ast.Float64(tok.Float())
@@ -320,139 +250,72 @@ func (cj *constantJSON) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 		cj.Constant = ast.List(elems)
 
 	case '{': // object (ApplyFn for pair/map/struct)
-		// Read the object fields manually
-		var symbol string
-		var arity int
-		var args []ast.BaseTerm
+		// Simplified format: {"fn:pair": [...], "fn:map": [...], "fn:struct": [...]}
+		// Read the function key (should be one of fn:pair, fn:map, fn:struct)
+		tok, err := dec.ReadToken()
+		if err != nil {
+			return fmt.Errorf("failed to read object key: %w", err)
+		}
+		if tok.Kind() != '"' {
+			return fmt.Errorf("expected string key for function object, got %c", tok.Kind())
+		}
+		symbol := tok.String()
 
-		// Read object fields
-		for {
-			// Read key or closing brace
-			tok, err := dec.ReadToken()
-			if err != nil {
-				return fmt.Errorf("failed to read object token: %w", err)
-			}
-			if tok.Kind() == '}' {
-				break
-			}
-			if tok.Kind() != '"' {
-				return fmt.Errorf("expected string key, got %c", tok.Kind())
-			}
-
-			key := tok.String()
-			switch key {
-			case "function":
-				// Read the function object
-				tok, err := dec.ReadToken()
-				if err != nil {
-					return fmt.Errorf("failed to read function object: %w", err)
-				}
-				if tok.Kind() != '{' {
-					return fmt.Errorf("expected object for function, got %c", tok.Kind())
-				}
-
-				// Read function fields
-				for {
-					tok, err := dec.ReadToken()
-					if err != nil {
-						return fmt.Errorf("failed to read function field: %w", err)
-					}
-					if tok.Kind() == '}' {
-						break
-					}
-					if tok.Kind() != '"' {
-						return fmt.Errorf("expected string key, got %c", tok.Kind())
-					}
-
-					funcKey := tok.String()
-					switch funcKey {
-					case "symbol":
-						tok, err := dec.ReadToken()
-						if err != nil {
-							return fmt.Errorf("failed to read symbol: %w", err)
-						}
-						symbol = tok.String()
-					case "arity":
-						tok, err := dec.ReadToken()
-						if err != nil {
-							return fmt.Errorf("failed to read arity: %w", err)
-						}
-						arity = int(tok.Int())
-					default:
-						return fmt.Errorf("unexpected function field: %s", funcKey)
-					}
-				}
-
-			case "args":
-				// Read the args array
-				tok, err := dec.ReadToken()
-				if err != nil {
-					return fmt.Errorf("failed to read args array: %w", err)
-				}
-				if tok.Kind() != '[' {
-					return fmt.Errorf("expected array for args, got %c", tok.Kind())
-				}
-
-				// Read array elements
-				for dec.PeekKind() != ']' {
-					var arg constantJSON
-					if err := arg.UnmarshalJSONFrom(dec); err != nil {
-						return fmt.Errorf("failed to unmarshal arg: %w", err)
-					}
-					args = append(args, arg.Constant)
-				}
-
-				// Read closing bracket
-				if _, err := dec.ReadToken(); err != nil {
-					return fmt.Errorf("failed to read args array end: %w", err)
-				}
-
-			default:
-				return fmt.Errorf("unexpected object field: %s", key)
-			}
+		// Read the args array
+		tok, err = dec.ReadToken()
+		if err != nil {
+			return fmt.Errorf("failed to read args array: %w", err)
+		}
+		if tok.Kind() != '[' {
+			return fmt.Errorf("expected array for args, got %c", tok.Kind())
 		}
 
-		// Validate arity matches number of args
-		if arity != len(args) {
-			return fmt.Errorf("arity mismatch: expected %d args, got %d", arity, len(args))
+		// Read array elements
+		var args []ast.Constant
+		for dec.PeekKind() != ']' {
+			var arg constantJSON
+			if err := arg.UnmarshalJSONFrom(dec); err != nil {
+				return fmt.Errorf("failed to unmarshal arg: %w", err)
+			}
+			args = append(args, arg.Constant)
 		}
 
-		// Convert args to constants (they should all be constants already)
-		constants := make([]ast.Constant, len(args))
-		for i, arg := range args {
-			c, ok := arg.(ast.Constant)
-			if !ok {
-				return fmt.Errorf("arg %d is not a constant: %T", i, arg)
-			}
-			constants[i] = c
+		// Read closing bracket
+		if _, err := dec.ReadToken(); err != nil {
+			return fmt.Errorf("failed to read args array end: %w", err)
+		}
+
+		// Read closing brace
+		if tok, err := dec.ReadToken(); err != nil || tok.Kind() != '}' {
+			return fmt.Errorf("expected object end '}'")
 		}
 
 		// Construct the constant based on the function symbol
 		switch symbol {
 		case "fn:pair":
-			if len(constants) != 2 {
-				return fmt.Errorf("fn:pair expects 2 args, got %d", len(constants))
+			if len(args) != 2 {
+				return fmt.Errorf("fn:pair expects 2 args, got %d", len(args))
 			}
-			cj.Constant = ast.Pair(&constants[0], &constants[1])
+			cj.Constant = ast.Pair(&args[0], &args[1])
 
 		case "fn:map":
-			if len(constants)%2 != 0 {
-				return fmt.Errorf("fn:map expects even number of args, got %d", len(constants))
+			if len(args)%2 != 0 {
+				return fmt.Errorf("fn:map expects even number of args, got %d", len(args))
 			}
 			kvMap := make(map[*ast.Constant]*ast.Constant)
-			for i := 0; i < len(constants); i += 2 {
-				kvMap[&constants[i]] = &constants[i+1]
+			for i := 0; i < len(args); i += 2 {
+				kvMap[&args[i]] = &args[i+1]
 			}
 			mapConst := ast.Map(kvMap)
 			cj.Constant = *mapConst
 
 		case "fn:struct":
-			if len(constants)%2 != 0 {
-				return fmt.Errorf("fn:struct expects even number of args, got %d", len(constants))
+			if len(args)%2 != 0 {
+				return fmt.Errorf("fn:struct expects even number of args, got %d", len(args))
 			}
 			kvMap := make(map[*ast.Constant]*ast.Constant)
-			for i := 0; i < len(constants); i += 2 {
-				kvMap[&constants[i]] = &constants[i+1]
+			for i := 0; i < len(args); i += 2 {
+				kvMap[&args[i]] = &args[i+1]
 			}
 			structConst := ast.Struct(kvMap)
 			cj.Constant = *structConst
@@ -573,8 +436,14 @@ func (aj *atomJSON) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 				}
 				switch predKey {
 				case "symbol":
+					if tok.Kind() != '"' {
+						return fmt.Errorf("expected string for 'symbol', got %s", tok.Kind().String())
+					}
 					symbol = tok.String()
 				case "arity":
+					if tok.Kind() != '0' {
+						return fmt.Errorf("expected number for 'arity', got %s", tok.Kind().String())
+					}
 					arity = int(tok.Int())
 				}
 			}
