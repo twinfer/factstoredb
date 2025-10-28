@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	bitbucket.org/creachadair/stringset v0.0.14
+	github.com/fergusstrange/embedded-postgres v1.32.0
 	github.com/go-json-experiment/json v0.0.0-20251024212118-8a0206d3c796
 	github.com/google/mangle v0.3.0
 	github.com/lib/pq v1.10.9
@@ -13,7 +14,6 @@ require (
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fergusstrange/embedded-postgres v1.32.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
