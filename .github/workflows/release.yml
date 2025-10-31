@@ -1,0 +1,50 @@
+# This GitHub Actions workflow handles the release process for the Go package.
+
+name: Release Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on tags like v1.0.0, v1.2.3, etc.
+  pull_request: # Also run tests on pull requests
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.23', '1.24', '1.25' ] # Test against minimum and latest versions
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Run tests
+        run: go test -race -v ./...
+
+  release:
+    name: Create Release
+    needs: test # Only run release job if tests pass
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') # Only run for tags
+    permissions:
+      contents: write # Needed to create the GitHub Release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history so release notes can be generated
+
+      - name: Create GitHub Release
+        # This step uses the tag message for the release title and automatically
+        # generates release notes from the commit history since the last tag.
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
