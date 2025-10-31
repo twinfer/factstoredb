@@ -1,7 +1,7 @@
 package factstoredb
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -47,10 +47,9 @@ func (d sqliteDialect) createIndexSQL() string {
 }
 
 func (d sqliteDialect) addSQL() string {
-	// Use jsonb() to convert JSON text to binary JSONB format
 	return `
 		INSERT INTO facts (predicate, atom_hash, args)
-		VALUES (?, ?, jsonb(?))
+		VALUES (?, ?, ?)
 		ON CONFLICT DO NOTHING
 	`
 }
@@ -70,13 +69,12 @@ func (d sqliteDialect) getFactsBaseSQL() string {
 func (d sqliteDialect) batchInsertSQL(numRows int) string {
 	var sb strings.Builder
 	sb.WriteString("INSERT INTO facts (predicate, atom_hash, args) VALUES ")
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		// Each row has 3 placeholders: predicate, atom_hash, args
-		// The args placeholder is wrapped in jsonb() to convert text to binary JSON.
-		sb.WriteString("(?,?,jsonb(?))")
+		// Each row has 3 placeholders: predicate, atom_hash, args.
+		sb.WriteString("(?,?,?)")
 	}
 	sb.WriteString(" ON CONFLICT DO NOTHING")
 	return sb.String()
@@ -87,13 +85,19 @@ func (d sqliteDialect) getFactsFragment(index int, params *[]any) string {
 	// extracted forms. We wrap the parameter in a single-element JSON array
 	// and extract from it. This ensures that strings are compared with strings,
 	// numbers with numbers, etc., without ambiguity.
-	// e.g., json_extract('["/foo"]', '$[0]') == json_extract('["/foo"]', '$[0]')
-	return fmt.Sprintf(" AND json_extract(args, '$[%d]') = json_extract(?, '$[0]')", index)
+	// e.g., json_extract('["/foo"]', '$[0]') == json_extract('["/foo"]', '$[0]').
+	// Using a builder is more performant than fmt.Sprintf.
+	var sb strings.Builder
+	sb.WriteString(" AND json_extract(args, '$[")
+	sb.WriteString(strconv.Itoa(index))
+	sb.WriteString("]') = json_extract(?, '$[0]')")
+	return sb.String()
 }
 
 func (d sqliteDialect) jsonParam(jsonStr string) any {
 	// Wrap the JSON string in a single-element array `["..."]` for the comparison.
-	return fmt.Sprintf("[%s]", jsonStr)
+	// Simple concatenation is faster than fmt.Sprintf.
+	return "[" + jsonStr + "]"
 }
 
 // --- PostgreSQL Dialect ---
@@ -118,10 +122,11 @@ func (d postgresDialect) createIndexSQL() string {
 }
 
 func (d postgresDialect) addSQL() string {
-	// Use a type cast (?::jsonb) and specify the conflict target.
+	// By omitting the ::jsonb cast, we rely on the driver to use the binary
+	// protocol for jsonb, which is more efficient than sending text and casting.
 	return `
 		INSERT INTO facts (predicate, atom_hash, args)
-		VALUES ($1, $2, $3::jsonb)
+		VALUES ($1, $2, $3)
 		ON CONFLICT (atom_hash) DO NOTHING
 	`
 }
@@ -142,12 +147,19 @@ func (d postgresDialect) batchInsertSQL(numRows int) string {
 	var sb strings.Builder
 	sb.WriteString("INSERT INTO facts (predicate, atom_hash, args) VALUES ")
 	paramIndex := 1
-	for i := 0; i < numRows; i++ {
+	for i := range numRows {
 		if i > 0 {
 			sb.WriteString(",")
 		}
-		// Each row has 3 placeholders, and the args placeholder needs a type cast.
-		sb.WriteString(fmt.Sprintf("($%d, $%d, $%d::jsonb)", paramIndex, paramIndex+1, paramIndex+2))
+		// Each row has 3 placeholders. We omit the ::jsonb cast for binary transfer.
+		// Appending directly to the builder is more efficient than fmt.Sprintf.
+		sb.WriteString("($")
+		sb.WriteString(strconv.Itoa(paramIndex))
+		sb.WriteString(", $")
+		sb.WriteString(strconv.Itoa(paramIndex + 1))
+		sb.WriteString(", $")
+		sb.WriteString(strconv.Itoa(paramIndex + 2))
+		sb.WriteString(")")
 		paramIndex += 3
 	}
 	// PostgreSQL requires specifying the conflict target column(s).
@@ -157,9 +169,14 @@ func (d postgresDialect) batchInsertSQL(numRows int) string {
 
 func (d postgresDialect) getFactsFragment(index int, params *[]any) string {
 	// The '->' operator extracts a JSON array element as jsonb.
-	// We compare it to the parameter, which is also cast to jsonb.
+	// We compare it to the parameter, which is sent as a jsonb type.
 	// The placeholder is determined by the current length of the params slice.
-	return fmt.Sprintf(" AND (args -> %d) = $%d::jsonb", index, len(*params)+1)
+	var sb strings.Builder
+	sb.WriteString(" AND (args -> ")
+	sb.WriteString(strconv.Itoa(index))
+	sb.WriteString(") = $")
+	sb.WriteString(strconv.Itoa(len(*params) + 1))
+	return sb.String()
 }
 
 func (d postgresDialect) jsonParam(jsonStr string) any {

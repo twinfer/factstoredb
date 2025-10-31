@@ -1,6 +1,7 @@
 package factstoredb
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"hash/fnv"
@@ -47,7 +48,7 @@ func (s *FactStoreDB) Add(atom ast.Atom) bool {
 	// Convert atom to row format
 	// also verifies all args are constants
 	predicate := predicateToKey(atom.Predicate)
-	atomHash, args, err := atomToRowForInsert(atom)
+	atomHash, args, err := atomToRowForInsertBinary(atom)
 	if err != nil {
 		// Cannot store atoms with non-constant args
 		return false
@@ -73,7 +74,7 @@ func (s *FactStoreDB) Add(atom ast.Atom) bool {
 // Contains returns true if given atom is already present in store.
 func (s *FactStoreDB) Contains(atom ast.Atom) bool {
 	// Convert atom to canonical form for lookup
-	atomHash, _, err := atomToRowForInsert(atom)
+	atomHash, _, err := atomToRowForInsertBinary(atom)
 	if err != nil {
 		log.Printf("DBFactStore failed to process atom for Contains: %v", err)
 		return false
@@ -93,7 +94,7 @@ func (s *FactStoreDB) Contains(atom ast.Atom) bool {
 // Remove removes a fact from the store and returns true if that fact was present.
 func (s *FactStoreDB) Remove(atom ast.Atom) bool {
 	// Convert atom to canonical form for removal
-	atomHash, _, err := atomToRowForInsert(atom)
+	atomHash, _, err := atomToRowForInsertBinary(atom)
 	if err != nil {
 		log.Printf("DBFactStore failed to process atom for Remove: %v", err)
 		return false
@@ -142,12 +143,8 @@ func (s *FactStoreDB) GetFacts(pattern ast.Atom, callback func(ast.Atom) error) 
 			if err := (constantJSON{constant}).MarshalJSONTo(enc); err != nil {
 				return fmt.Errorf("failed to marshal pattern arg: %w", err)
 			}
-
-			// Trim trailing newline that jsontext.Encoder adds
-			jsonStr := strings.TrimSuffix(buf.String(), "\n")
-
 			queryBuf.WriteString(s.dialect.getFactsFragment(i, &params))
-			params = append(params, s.dialect.jsonParam(jsonStr))
+			params = append(params, s.dialect.jsonParam(buf.String()))
 		}
 		// If it's a variable, don't filter (wildcard)
 	}
@@ -270,12 +267,12 @@ func (s *FactStoreDB) batchInsertFacts(facts []ast.Atom) error {
 	type row struct {
 		predicate string
 		atomHash  int64
-		args      string
+		args      []byte
 	}
 	rows := make([]row, 0, len(facts))
 	for _, fact := range facts {
 		predicate := predicateToKey(fact.Predicate)
-		atomHash, args, err := atomToRowForInsert(fact)
+		atomHash, args, err := atomToRowForInsertBinary(fact)
 		if err != nil {
 			// Skip non-grounded atoms (shouldn't happen in a proper FactStore)
 			continue
@@ -536,39 +533,38 @@ func getSortedConstants(c ast.Constant) ([]ast.Constant, error) {
 	return flattenPairs(pairs), nil
 }
 
-// atomToRowForInsert converts an ast.Atom to atom_hash and args for insertion.
+// atomToRowForInsertBinary converts an ast.Atom to atom_hash and binary JSON args for insertion.
 // Assumes all args are already ast.Constant (not variables or other BaseTerms).
 // Returns an error if any arg is not a constant.
 // Callers can compute the predicate key using predicateToKey(atom.Predicate).
-func atomToRowForInsert(atom ast.Atom) (int64, string, error) {
+func atomToRowForInsertBinary(atom ast.Atom) (int64, []byte, error) {
 
 	// Compute hash starting with predicate
 	h := fnv.New64a()
-	h.Write([]byte(atom.Predicate.Symbol))
+	_, _ = h.Write([]byte(atom.Predicate.Symbol))
 	predicateHash := h.Sum64()
 	hashResult := szudzikElegantPair(predicateHash, uint64(atom.Predicate.Arity))
 
 	// Marshal constants to JSON while also computing the hash in a single pass.
-	var buf strings.Builder
+	var buf bytes.Buffer
 	enc := jsontext.NewEncoder(&buf)
-	if err := enc.WriteToken(jsontext.BeginArray); err != nil {
-		return 0, "", fmt.Errorf("failed to write array start for JSON args: %w", err)
-	}
-
+	// The encoder must produce compact output to be a valid binary JSONB value.
+	// jsontext.Encoder does this by default.
+	_ = enc.WriteToken(jsontext.BeginArray)
 	for _, arg := range atom.Args {
 		c, ok := arg.(ast.Constant)
 		if !ok {
-			return 0, "", fmt.Errorf("evaluation produced something that is not a value: %v %T", arg, arg)
+			return 0, nil, fmt.Errorf("evaluation produced something that is not a value: %v %T", arg, arg)
 		}
 		if err := (constantJSON{c}).MarshalJSONTo(enc); err != nil {
-			return 0, "", fmt.Errorf("failed to marshal arg to JSON: %w", err)
+			return 0, nil, fmt.Errorf("failed to marshal arg to JSON: %w", err)
 		}
 		// For maps and structs, we need an order-insensitive hash.
 		// We get the key-value pairs, sort them by key, and then hash them in order.
 		if c.Type == ast.MapShape || c.Type == ast.StructShape {
 			sorted, err := getSortedConstants(c)
 			if err != nil {
-				return 0, "", fmt.Errorf("failed to sort map/struct for hashing: %w", err)
+				return 0, nil, fmt.Errorf("failed to sort map/struct for hashing: %w", err)
 			}
 			for _, part := range sorted {
 				partHash := szudzikElegantPair(part.Hash(), uint64(part.Type))
@@ -580,15 +576,11 @@ func atomToRowForInsert(atom ast.Atom) (int64, string, error) {
 			hashResult = szudzikElegantPair(hashResult, argHashWithType)
 		}
 	}
-
-	if err := enc.WriteToken(jsontext.EndArray); err != nil {
-		return 0, "", fmt.Errorf("failed to write array end for JSON args: %w", err)
-	}
+	_ = enc.WriteToken(jsontext.EndArray)
 
 	// Cast to int64 for database/sql compatibility - BIGINT will interpret the bit pattern correctly
 	atomHash := int64(hashResult)
-
-	return atomHash, buf.String(), nil
+	return atomHash, buf.Bytes(), nil
 }
 
 // flattenPairs converts a slice of sorted pairs into a flat slice of constants.

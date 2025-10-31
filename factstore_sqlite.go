@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strconv"
 
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -55,7 +56,7 @@ func NewFactStoreSQLite(dbPath string, opts ...StoreOption) (*FactStoreDB, error
 	if dbPath == ":memory:" {
 		// Generate unique name for this in-memory database instance
 		id := inMemoryDBCounter.Add(1)
-		dbPath = fmt.Sprintf("file:factstore_%d?mode=memory&cache=shared", id)
+		dbPath = "file:factstore_" + strconv.FormatUint(id, 10) + "?mode=memory&cache=shared"
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
@@ -87,7 +88,7 @@ func NewFactStoreSQLite(dbPath string, opts ...StoreOption) (*FactStoreDB, error
 	// Apply PRAGMA settings
 	for _, key := range keys {
 		value := cfg.pragmas[key]
-		pragmaSQL := fmt.Sprintf("PRAGMA %s=%s", key, value)
+		pragmaSQL := "PRAGMA " + key + "=" + value
 		if _, err := db.Exec(pragmaSQL); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("failed to set pragma %q: %w", pragmaSQL, err)

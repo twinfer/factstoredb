@@ -1,13 +1,18 @@
 # SQLite FactStore for Mangle
 
-This package provides a persistent, high-performance `FactStore` implementation for the Google Mangle Datalog engine, backed by SQLite.
+[![Build Status](https://github.com/twinfer/factstoredb/actions/workflows/release.yml/badge.svg)](https://github.com/twinfer/factstoredb/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/twinfer/factstoredb)](https://goreportcard.com/report/github.com/twinfer/factstoredb)
+[![GoDoc](https://pkg.go.dev/badge/github.com/twinfer/factstoredb.svg)](https://pkg.go.dev/github.com/twinfer/factstoredb)
+
+This package provides a persistent, high-performance `FactStore` implementation for the Google Mangle Datalog engine, with support for **SQLite** and **PostgreSQL** backends.
 
 It is designed as a durable, concurrent-safe, and efficient storage layer for Mangle facts (`ast.Atom`), making it suitable for applications where facts must persist beyond the life of the process.
 
 ## Features
 
-*   **Persistent Storage**: Uses SQLite to store facts on disk or in memory.
-*   **High Performance**: Optimized for speed with `WAL` mode, prepared statements, and a `WITHOUT ROWID` schema.
+*   **Multi-Backend Support**: Works seamlessly with both SQLite (for embedded or in-memory use) and PostgreSQL (for robust, scalable production environments).
+*   **Persistent Storage**: Uses a SQL database to store facts on disk.
+*   **High Performance**: Optimized for speed with prepared statements, bulk inserts, and a `WITHOUT ROWID` schema (on SQLite).
 *   **Efficient Querying**: Stores atom arguments as a binary `JSONB` blob, allowing for fast, indexed pattern matching using SQLite's native JSON functions.
 *   **Concurrent Safe**: All operations (`Add`, `Contains`, `Remove`, `GetFacts`) are safe for concurrent use by multiple goroutines.
 *   **Full `FactStore` Compliance**: Implements the `factstore.FactStoreWithRemove` interface, integrating seamlessly with Mangle.
@@ -36,6 +41,7 @@ CREATE INDEX idx_predicate ON facts(predicate);
 *   **`args`**: A `BLOB` column storing the atom's arguments as a binary JSON array (`JSONB`). This is more efficient for storage and querying than text-based JSON.
 *   **`WITHOUT ROWID`**: This SQLite optimization makes the table an "index-organized table." The `atom_hash` primary key *is* the table, eliminating a layer of indirection and reducing storage space and lookup time.
 
+This schema design is portable and works efficiently on both SQLite and PostgreSQL.
 ## Usage
 
 Here is a basic example of how to create and use the `DBFactStore`.
@@ -53,11 +59,15 @@ import (
 )
 
 func main() {
-	// For a persistent, file-based store:
-	// store, err := dbfactstore.FactStoreSQLite("./my_facts.db")
+	// For a persistent, file-based SQLite store:
+	// store, err := factstoredb.NewFactStoreSQLite("./my_facts.db")
 
-	// For an in-memory store (useful for testing):
-	store, err := dbfactstore.FactStoreSQLite(":memory:")
+	// For a PostgreSQL store:
+	// connStr := "postgres://user:password@host:port/dbname?sslmode=disable"
+	// store, err := factstoredb.NewPostgresFactStore(connStr)
+
+	// For an in-memory SQLite store (useful for testing):
+	store, err := factstoredb.NewFactStoreSQLite(":memory:")
 	if err != nil {
 		log.Fatalf("Failed to create fact store: %v", err)
 	}
@@ -110,38 +120,27 @@ func main() {
 
 ## Performance
 
-As a persistent store, `DBFactStore` has higher latency than Mangle's built-in in-memory stores due to disk I/O and serialization overhead. However, it is heavily optimized for its role.
+As a persistent store, `factstoredb` has higher latency than Mangle's built-in in-memory stores due to disk I/O and serialization overhead. However, it is heavily optimized for its role on both SQLite and PostgreSQL.
 
 *   **Writes (`Add`, `Remove`)**: Very fast due to the indexed `atom_hash` and atomic `INSERT ON CONFLICT`.
 *   **Reads (`Contains`)**: Extremely fast, as it's a primary key lookup on the hash.
 *   **Queries (`GetFacts`)**: Performance depends on the pattern.
     *   Queries on a fully-grounded atom are as fast as `Contains`.
     *   Queries on a predicate (`predicate(X, Y)`) are fast due to the `idx_predicate` index.
-    *   Queries with bound arguments (`predicate(/a, X)`) use `json_extract` to filter, which is efficient on the binary JSONB format.
+    *   Queries with bound arguments (`predicate(/a, X)`) use native JSON functions (`json_extract` or `->`) to filter, which is efficient on the binary JSONB format.
 
-Here is a sample from the benchmark results, comparing against Mangle's `IndexedInMemory` store.
-
-```
-goos: darwin
-goarch: arm64
-cpu: Apple M4
-
-BenchmarkAdd/SQLite-10                      192112          5652 ns/op
-BenchmarkAdd/IndexedInMemory-10           18983912          62.03 ns/op
-
-BenchmarkContains/SQLite-10                 347124          3402 ns/op
-BenchmarkContains/IndexedInMemory-10      26702194          47.38 ns/op
-
-BenchmarkGetFactsPartialMatch/SQLite-10      10000        104919 ns/op
-BenchmarkGetFactsPartialMatch/IndexedInMemory-10    27808917          42.95 ns/op
+The project includes a comprehensive benchmark suite that compares the performance of the SQLite, PostgreSQL, and in-memory backends. You can run these benchmarks yourself to see how it performs on your hardware:
+```bash
+go test -bench=. ./...
 ```
 
-While slower than pure in-memory options, it provides the crucial benefit of persistence, making it ideal for stateful applications.
+While slower than pure in-memory options, it provides the crucial benefit of persistence and durability, making it ideal for stateful applications.
 
 ## Dependencies
 
 *   `github.com/google/mangle`
 *   `modernc.org/sqlite` (a pure Go SQLite driver)
+*   `github.com/lib/pq` (for PostgreSQL support)
 *   `github.com/go-json-experiment/json` (for high-performance JSON operations)
 
 ## Development
@@ -159,3 +158,5 @@ To run the benchmarks and compare performance against Mangle's standard stores:
 ```bash
 go test -bench=. ./...
 ```
+
+The test suite includes integration tests for both SQLite and PostgreSQL. The PostgreSQL tests use an embedded instance and run automatically, requiring no external setup.
