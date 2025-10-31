@@ -123,8 +123,8 @@ func (s *FactStoreDB) GetFacts(pattern ast.Atom, callback func(ast.Atom) error) 
 	var queryBuf strings.Builder
 	var params []any
 
-	// Base query: SELECT predicate, json(args) FROM facts WHERE predicate = ?
-	queryBuf.WriteString("SELECT predicate, json(args) FROM facts WHERE predicate = ?")
+	// Get the dialect-specific base query.
+	queryBuf.WriteString(s.dialect.getFactsBaseSQL())
 
 	// Filter by predicate key in "symbol_arity" format (e.g., "person_1")
 	// This is much faster than LIKE pattern matching
@@ -146,10 +146,7 @@ func (s *FactStoreDB) GetFacts(pattern ast.Atom, callback func(ast.Atom) error) 
 			// Trim trailing newline that jsontext.Encoder adds
 			jsonStr := strings.TrimSuffix(buf.String(), "\n")
 
-			// Append the dialect-specific fragment for JSON filtering.
-			queryBuf.WriteString(s.dialect.getFactsFragment(i))
-
-			// The parameter might need special handling by the dialect.
+			queryBuf.WriteString(s.dialect.getFactsFragment(i, &params))
 			params = append(params, s.dialect.jsonParam(jsonStr))
 		}
 		// If it's a variable, don't filter (wildcard)
@@ -302,25 +299,17 @@ func (s *FactStoreDB) batchInsertFacts(facts []ast.Atom) error {
 		end := min(i+batchSize, len(rows))
 		batch := rows[i:end]
 
-		// Build multi-row INSERT statement with jsonb() to convert JSON text to JSONB binary
-		// INSERT INTO facts (predicate, atom_hash, args) VALUES (?,?,jsonb(?)),(?,?,jsonb(?)),... ON CONFLICT DO NOTHING
-		var sqlBuilder strings.Builder
-		sqlBuilder.WriteString("INSERT INTO facts (predicate, atom_hash, args) VALUES ")
+		// Generate the dialect-specific multi-row INSERT statement.
+		sql := s.dialect.batchInsertSQL(len(batch))
 
 		// Pre-allocate params slice
 		params := make([]any, 0, len(batch)*3)
-
-		for j, r := range batch {
-			if j > 0 {
-				sqlBuilder.WriteString(",")
-			}
-			sqlBuilder.WriteString("(?,?,jsonb(?))")
+		for _, r := range batch {
 			params = append(params, r.predicate, r.atomHash, r.args)
 		}
-		sqlBuilder.WriteString(" ON CONFLICT DO NOTHING")
 
 		// Execute batch insert
-		if _, err := tx.Exec(sqlBuilder.String(), params...); err != nil {
+		if _, err := tx.Exec(sql, params...); err != nil {
 			return fmt.Errorf("failed to execute batch insert: %w", err)
 		}
 	}

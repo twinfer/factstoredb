@@ -1,7 +1,6 @@
 package factstoredb
 
 import (
-	"os"
 	"testing"
 
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
@@ -11,9 +10,6 @@ import (
 // runPostgresTests runs a suite of tests against a PostgreSQL-backed store.
 // It is skipped unless the POSTGRES_TEST environment variable is set.
 func TestPostgresFactStore(t *testing.T) {
-	if os.Getenv("POSTGRES_TEST") == "" {
-		t.Skip("Skipping PostgreSQL tests. Set POSTGRES_TEST=1 to enable.")
-	}
 
 	// Start an embedded PostgreSQL server for the test.
 	// This downloads and runs a temporary PostgreSQL instance.

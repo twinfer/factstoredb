@@ -132,15 +132,15 @@ func (s *FactStoreDB) initSchemaAndStatements() error {
 	s.addStmt = addStmt
 
 	// Prepare statement for Remove - simple atom_hash match (dialect-agnostic)
-	removeSQL := `DELETE FROM facts WHERE atom_hash = ?`
+	removeSQL := s.dialect.removeSQL()
 	removeStmt, err := s.db.Prepare(removeSQL)
 	if err != nil {
 		return fmt.Errorf("failed to prepare remove statement: %w", err)
 	}
 	s.removeStmt = removeStmt
 
-	// Prepare statement for Contains (dialect-agnostic)
-	containsSQL := `SELECT COUNT(*) FROM facts WHERE atom_hash = ?`
+	// Prepare statement for Contains
+	containsSQL := s.dialect.containsSQL()
 	containsStmt, err := s.db.Prepare(containsSQL)
 	if err != nil {
 		return fmt.Errorf("failed to prepare contains statement: %w", err)

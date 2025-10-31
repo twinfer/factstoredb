@@ -13,7 +13,7 @@ func TestNewFactStoreSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create in-memory store: %v", err)
 	}
-	defer store.Close()
+	t.Cleanup(func() { store.Close() })
 
 	if store.db == nil {
 		t.Fatal("Database connection is nil")
@@ -33,85 +33,6 @@ func newSQLiteTestStore() (factstore.FactStoreWithRemove, error) {
 // newSQLiteDBStore is a factory for creating DBFactStore for tests that need the concrete type.
 func newSQLiteDBStore() (*FactStoreDB, error) {
 	return NewFactStoreSQLite(":memory:")
-}
-
-// runSuite runs all shared tests for a given store implementation.
-func runSuite(t *testing.T, newStore func() (factstore.FactStoreWithRemove, error)) {
-	t.Run("AddContainsRemove", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runAddContainsRemoveTest(t, store)
-	})
-
-	t.Run("OrderInsensitiveHashing", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runOrderInsensitiveHashingTest(t, store)
-	})
-
-	t.Run("GetFactsPatternMatching", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runGetFactsPatternMatchingTest(t, store)
-	})
-
-	t.Run("NonGroundedAtoms", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runNonGroundedAtomsTest(t, store)
-	})
-
-	t.Run("ListPredicates", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runListPredicatesTest(t, store)
-	})
-
-	t.Run("Merge", func(t *testing.T) {
-		runMergeTest(t, newStore)
-	})
-
-	t.Run("RoundTrip", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runRoundTripTest(t, store)
-	})
-
-	t.Run("ComplexTypes", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runComplexTypesTest(t, store)
-	})
-
-	t.Run("Remove", func(t *testing.T) {
-		store, err := newStore()
-		if err != nil {
-			t.Fatalf("Failed to create store: %v", err)
-		}
-		defer store.(interface{ Close() error }).Close()
-		runRemoveTest(t, store)
-	})
 }
 
 // TestSQLiteFactStore runs the full test suite against the SQLite implementation.

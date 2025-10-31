@@ -641,3 +641,82 @@ func runJSONRoundTripTest(t *testing.T) {
 		})
 	}
 }
+
+// runSuite runs all shared tests for a given store implementation.
+func runSuite(t *testing.T, newStore func() (factstore.FactStoreWithRemove, error)) {
+	t.Run("AddContainsRemove", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runAddContainsRemoveTest(t, store)
+	})
+
+	t.Run("OrderInsensitiveHashing", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runOrderInsensitiveHashingTest(t, store)
+	})
+
+	t.Run("GetFactsPatternMatching", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runGetFactsPatternMatchingTest(t, store)
+	})
+
+	t.Run("NonGroundedAtoms", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runNonGroundedAtomsTest(t, store)
+	})
+
+	t.Run("ListPredicates", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runListPredicatesTest(t, store)
+	})
+
+	t.Run("Merge", func(t *testing.T) {
+		runMergeTest(t, newStore)
+	})
+
+	t.Run("RoundTrip", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runRoundTripTest(t, store)
+	})
+
+	t.Run("ComplexTypes", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runComplexTypesTest(t, store)
+	})
+
+	t.Run("Remove", func(t *testing.T) {
+		store, err := newStore()
+		if err != nil {
+			t.Fatalf("Failed to create store: %v", err)
+		}
+		t.Cleanup(func() { store.(interface{ Close() error }).Close() })
+		runRemoveTest(t, store)
+	})
+}
