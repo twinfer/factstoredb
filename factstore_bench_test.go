@@ -2,7 +2,6 @@ package factstoredb
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
@@ -57,25 +56,23 @@ func BenchmarkAdd(b *testing.B) {
 		}
 	})
 
-	// Run Postgres benchmarks only if POSTGRES_TEST is set
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			facts := prepareTestFacts(100000)
-			b.ResetTimer()
-			for i := 0; b.Loop(); i++ {
-				base.Add(facts[i%len(facts)])
-			}
-		})
+	// Run Postgres benchmarks
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		facts := prepareTestFacts(100000)
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			base.Add(facts[i%len(facts)])
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -103,24 +100,22 @@ func BenchmarkAddDuplicate(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			base.Add(fact) // Add once
-			b.ResetTimer()
-			for b.Loop() {
-				base.Add(fact)
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		base.Add(fact) // Add once
+		b.ResetTimer()
+		for b.Loop() {
+			base.Add(fact)
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -150,26 +145,24 @@ func BenchmarkContains(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			for _, f := range facts {
-				base.Add(f)
-			}
-			b.ResetTimer()
-			for i := 0; b.Loop(); i++ {
-				base.Contains(facts[i%len(facts)])
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		for _, f := range facts {
+			base.Add(f)
+		}
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			base.Contains(facts[i%len(facts)])
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -202,26 +195,24 @@ func BenchmarkRemove(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			for _, f := range facts {
-				base.Add(f)
-			}
-			b.ResetTimer()
-			for i := 0; b.Loop(); i++ {
-				base.Remove(facts[i%len(facts)])
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		for _, f := range facts {
+			base.Add(f)
+		}
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			base.Remove(facts[i%len(facts)])
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -258,31 +249,29 @@ func BenchmarkGetFactsAll(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			for _, f := range facts {
-				base.Add(f)
-			}
-			patternAtom := evalAtom("person(X)")
-			b.ResetTimer()
-			for b.Loop() {
-				count := 0
-				base.GetFacts(patternAtom, func(ast.Atom) error {
-					count++
-					return nil
-				})
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		for _, f := range facts {
+			base.Add(f)
+		}
+		patternAtom := evalAtom("person(X)")
+		b.ResetTimer()
+		for b.Loop() {
+			count := 0
+			base.GetFacts(patternAtom, func(ast.Atom) error {
+				count++
+				return nil
+			})
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -321,31 +310,29 @@ func BenchmarkGetFactsPartialMatch(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			for _, f := range facts {
-				base.Add(f)
-			}
-			patternAtom := evalAtom("parent(/p500, X)")
-			b.ResetTimer()
-			for b.Loop() {
-				count := 0
-				base.GetFacts(patternAtom, func(ast.Atom) error {
-					count++
-					return nil
-				})
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		for _, f := range facts {
+			base.Add(f)
+		}
+		patternAtom := evalAtom("parent(/p500, X)")
+		b.ResetTimer()
+		for b.Loop() {
+			count := 0
+			base.GetFacts(patternAtom, func(ast.Atom) error {
+				count++
+				return nil
+			})
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
@@ -387,29 +374,27 @@ func BenchmarkMerge(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		sourceBase := factstore.NewSimpleInMemoryStore()
-		for _, f := range sourceFacts {
-			sourceBase.Add(f)
-		}
-
-		b.Run("Postgres", func(b *testing.B) {
-			for b.Loop() {
-				b.StopTimer()
-				targetBase, _ := NewPostgresFactStore(connStr)
-				b.StartTimer()
-				targetBase.Merge(&sourceBase)
-				targetBase.Close()
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	sourceBase := factstore.NewSimpleInMemoryStore()
+	for _, f := range sourceFacts {
+		sourceBase.Add(f)
+	}
+
+	b.Run("Postgres", func(b *testing.B) {
+		for b.Loop() {
+			b.StopTimer()
+			targetBase, _ := NewPostgresFactStore(connStr)
+			b.StartTimer()
+			targetBase.Merge(&sourceBase)
+			targetBase.Close()
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		sourceBase := factstore.NewSimpleInMemoryStore()
@@ -451,28 +436,26 @@ func BenchmarkMixedWorkload(b *testing.B) {
 		}
 	})
 
-	if os.Getenv("POSTGRES_TEST") != "" {
-		postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433))
-		if err := postgres.Start(); err != nil {
-			b.Fatalf("Failed to start embedded-postgres: %v", err)
-		}
-		defer postgres.Stop()
-		connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-
-		b.Run("Postgres", func(b *testing.B) {
-			base, _ := NewPostgresFactStore(connStr)
-			defer base.Close()
-			patternAtom := evalAtom("fact(X, Y)")
-			b.ResetTimer()
-			for i := 0; b.Loop(); i++ {
-				base.Add(facts[i%len(facts)])
-				base.Contains(facts[(i+1)%len(facts)])
-				if i%10 == 0 {
-					base.GetFacts(patternAtom, func(ast.Atom) error { return nil })
-				}
-			}
-		})
+	postgres := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().Port(5433).Logger(nil))
+	if err := postgres.Start(); err != nil {
+		b.Fatalf("Failed to start embedded-postgres: %v", err)
 	}
+	defer postgres.Stop()
+	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+
+	b.Run("Postgres", func(b *testing.B) {
+		base, _ := NewPostgresFactStore(connStr)
+		defer base.Close()
+		patternAtom := evalAtom("fact(X, Y)")
+		b.ResetTimer()
+		for i := 0; b.Loop(); i++ {
+			base.Add(facts[i%len(facts)])
+			base.Contains(facts[(i+1)%len(facts)])
+			if i%10 == 0 {
+				base.GetFacts(patternAtom, func(ast.Atom) error { return nil })
+			}
+		}
+	})
 
 	b.Run("SimpleInMemory", func(b *testing.B) {
 		base := factstore.NewSimpleInMemoryStore()
