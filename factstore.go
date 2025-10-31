@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/go-json-experiment/json/jsontext"
 
@@ -18,14 +17,13 @@ import (
 	"github.com/google/mangle/factstore"
 )
 
-// Counter for generating unique in-memory database names
-var inMemoryDBCounter atomic.Uint64
-
 // DBFactStore implements the Mangle FactStore interface using SQLite
 // as the backing storage. It uses a single table schema with predicate and
 // args columns, where args is stored as JSON for efficient querying.
 type FactStoreDB struct {
 	db *sql.DB
+	// ownsDB indicates whether this store owns the db connection and should close it
+	ownsDB bool
 	// dialect handles SQL syntax differences between databases.
 	dialect dialect
 	// Prepared statements for performance
@@ -450,7 +448,8 @@ func (cr *countingReader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-// Close closes the database connection.
+// Close closes the prepared statements and database connection (if owned).
+// If the store was created with a FromDB constructor, the db connection is not closed.
 func (s *FactStoreDB) Close() error {
 	if s.addStmt != nil {
 		s.addStmt.Close()
@@ -461,7 +460,11 @@ func (s *FactStoreDB) Close() error {
 	if s.containsStmt != nil {
 		s.containsStmt.Close()
 	}
-	return s.db.Close()
+	// Only close the db connection if this store owns it
+	if s.ownsDB {
+		return s.db.Close()
+	}
+	return nil
 }
 
 // Helper Functions

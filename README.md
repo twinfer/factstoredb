@@ -12,7 +12,7 @@ It is designed as a durable, concurrent-safe, and efficient storage layer for Ma
 
 *   **Multi-Backend Support**: Works seamlessly with both SQLite (for embedded or in-memory use) and PostgreSQL (for robust, scalable production environments).
 *   **Persistent Storage**: Uses a SQL database to store facts on disk.
-*   **High Performance**: Optimized for speed with prepared statements, bulk inserts, and a `WITHOUT ROWID` schema (on SQLite).
+*   **High Performance**: Optimized for speed with prepared statements, bulk inserts.
 *   **Efficient Querying**: Stores atom arguments as a binary `JSONB` blob, allowing for fast, indexed pattern matching using SQLite's native JSON functions.
 *   **Concurrent Safe**: All operations (`Add`, `Contains`, `Remove`, `GetFacts`) are safe for concurrent use by multiple goroutines.
 *   **Full `FactStore` Compliance**: Implements the `factstore.FactStoreWithRemove` interface, integrating seamlessly with Mangle.
@@ -29,7 +29,7 @@ CREATE TABLE facts (
     atom_hash BIGINT NOT NULL,
     args BLOB NOT NULL,
     PRIMARY KEY(atom_hash)
-) WITHOUT ROWID;
+);
 
 CREATE INDEX idx_predicate ON facts(predicate);
 ```
@@ -44,7 +44,9 @@ CREATE INDEX idx_predicate ON facts(predicate);
 This schema design is portable and works efficiently on both SQLite and PostgreSQL.
 ## Usage
 
-Here is a basic example of how to create and use the `DBFactStore`.
+### Basic Usage (Connection String)
+
+The simplest way to create a fact store is with a connection string. The library handles connection creation and management for you.
 
 ```go
 package main
@@ -55,7 +57,7 @@ import (
 
 	"github.com/google/mangle/ast"
 	"github.com/google/mangle/parse"
-	"twinfer/factstoredb" 
+	"twinfer/factstoredb"
 )
 
 func main() {
@@ -64,7 +66,7 @@ func main() {
 
 	// For a PostgreSQL store:
 	// connStr := "postgres://user:password@host:port/dbname?sslmode=disable"
-	// store, err := factstoredb.NewPostgresFactStore(connStr)
+	// store, err := factstoredb.NewFactStorePostgreSQL(connStr)
 
 	// For an in-memory SQLite store (useful for testing):
 	store, err := factstoredb.NewFactStoreSQLite(":memory:")
@@ -117,6 +119,59 @@ func main() {
 	fmt.Printf("Fact count is now: %d\n", store.EstimateFactCount())
 }
 ```
+
+### Advanced Usage (Custom DB Connection)
+
+For advanced use cases where you need more control over the database connection (custom pooling, connection sharing, testing with mocks, etc.), you can use the `FromDB` constructors:
+
+```go
+package main
+
+import (
+	"database/sql"
+	"log"
+
+	"github.com/google/mangle/ast"
+	"twinfer/factstoredb"
+
+	_ "modernc.org/sqlite"
+)
+
+func main() {
+	// Create and configure your own database connection
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Configure connection pooling as needed
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(10)
+
+	// Create store from the existing connection
+	// The store will NOT close the db when store.Close() is called
+	store, err := factstoredb.NewFactStoreSQLiteFromDB(db)
+	if err != nil {
+		log.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close() // Only closes prepared statements, not the db
+
+	// Use the store as normal
+	atom := evalAtom("test(/foo, 42)")
+	store.Add(atom)
+
+	// For PostgreSQL:
+	// db, _ := sql.Open("postgres", connStr)
+	// store, _ := factstoredb.NewFactStorePostgreSQLFromDB(db)
+}
+```
+
+**Key differences with `FromDB` constructors:**
+- You manage the database connection lifecycle
+- `store.Close()` only closes prepared statements, not the db connection
+- Useful for connection sharing, middleware injection, or testing with mock connections
+- Connection pooling must be configured before creating the store
 
 ## Performance
 

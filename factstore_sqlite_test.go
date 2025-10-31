@@ -1,6 +1,7 @@
 package factstoredb
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/google/mangle/ast"
@@ -19,9 +20,66 @@ func TestNewFactStoreSQLite(t *testing.T) {
 		t.Fatal("Database connection is nil")
 	}
 
+	if !store.ownsDB {
+		t.Error("Expected store to own the database connection")
+	}
+
 	count := store.EstimateFactCount()
 	if count != 0 {
 		t.Errorf("Expected empty store, got %d facts", count)
+	}
+}
+
+// TestNewFactStoreSQLiteFromDB tests the FromDB constructor
+func TestNewFactStoreSQLiteFromDB(t *testing.T) {
+	// Create a database connection
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// Create store from the db connection
+	store, err := NewFactStoreSQLiteFromDB(db)
+	if err != nil {
+		t.Fatalf("Failed to create store from db: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	if store.db == nil {
+		t.Fatal("Database connection is nil")
+	}
+
+	if store.ownsDB {
+		t.Error("Expected store to NOT own the database connection")
+	}
+
+	count := store.EstimateFactCount()
+	if count != 0 {
+		t.Errorf("Expected empty store, got %d facts", count)
+	}
+
+	// Verify store works correctly
+	atom := evalAtom("test(/foo, 42)")
+	if !store.Add(atom) {
+		t.Error("Failed to add atom")
+	}
+
+	if !store.Contains(atom) {
+		t.Error("Store should contain the added atom")
+	}
+
+	// Close the store and verify db is still usable
+	store.Close()
+
+	// DB should still be open since store doesn't own it
+	var result int
+	err = db.QueryRow("SELECT COUNT(*) FROM facts").Scan(&result)
+	if err != nil {
+		t.Errorf("Database should still be usable after store.Close(): %v", err)
+	}
+	if result != 1 {
+		t.Errorf("Expected 1 fact in database, got %d", result)
 	}
 }
 

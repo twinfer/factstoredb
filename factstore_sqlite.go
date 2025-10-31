@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync/atomic"
 
 	_ "modernc.org/sqlite" // SQLite driver
 )
@@ -13,6 +14,9 @@ import (
 type config struct {
 	pragmas map[string]string
 }
+
+// Counter for generating unique in-memory database names
+var inMemoryDBCounter atomic.Uint64
 
 // StoreOption is a function that configures a DBFactStore.
 type StoreOption func(*config)
@@ -46,20 +50,20 @@ func defaultConfig() *config {
 	}
 }
 
-// FactStoreSQLite creates a new SQLite-backed FactStore.
-// Pass ":memory:" for dbPath to create an in-memory database.
+// NewFactStoreSQLite creates a new SQLite-backed FactStore from a connection string.
+// Pass ":memory:" for connStr to create an in-memory database.
 // Optional StoreOption functions can be provided to customize PRAGMA settings.
-func NewFactStoreSQLite(dbPath string, opts ...StoreOption) (*FactStoreDB, error) {
+func NewFactStoreSQLite(connStr string, opts ...StoreOption) (*FactStoreDB, error) {
 	// For in-memory databases, use a unique name with shared cache
 	// This allows concurrent connections within the same database while keeping
 	// different database instances separate
-	if dbPath == ":memory:" {
+	if connStr == ":memory:" {
 		// Generate unique name for this in-memory database instance
 		id := inMemoryDBCounter.Add(1)
-		dbPath = "file:factstore_" + strconv.FormatUint(id, 10) + "?mode=memory&cache=shared"
+		connStr = "file:factstore_" + strconv.FormatUint(id, 10) + "?mode=memory&cache=shared"
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open SQLite: %w", err)
 	}
@@ -97,11 +101,52 @@ func NewFactStoreSQLite(dbPath string, opts ...StoreOption) (*FactStoreDB, error
 
 	store := &FactStoreDB{
 		db:      db,
+		ownsDB:  true,
 		dialect: sqliteDialect{},
 	}
 
 	if err := store.initSchemaAndStatements(); err != nil {
 		db.Close()
+		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
+	return store, nil
+}
+
+// NewFactStoreSQLiteFromDB creates a new SQLite-backed FactStore from an existing database connection.
+// The caller retains ownership of the db connection and must close it separately.
+// Optional StoreOption functions can be provided to customize PRAGMA settings.
+// Note: This constructor does not configure connection pooling settings (use NewFactStoreSQLite for that).
+func NewFactStoreSQLiteFromDB(db *sql.DB, opts ...StoreOption) (*FactStoreDB, error) {
+	// Apply default and user-provided options
+	cfg := defaultConfig()
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	// Sort keys for deterministic execution order (good for testing)
+	keys := make([]string, 0, len(cfg.pragmas))
+	for k := range cfg.pragmas {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Apply PRAGMA settings
+	for _, key := range keys {
+		value := cfg.pragmas[key]
+		pragmaSQL := "PRAGMA " + key + "=" + value
+		if _, err := db.Exec(pragmaSQL); err != nil {
+			return nil, fmt.Errorf("failed to set pragma %q: %w", pragmaSQL, err)
+		}
+	}
+
+	store := &FactStoreDB{
+		db:      db,
+		ownsDB:  false,
+		dialect: sqliteDialect{},
+	}
+
+	if err := store.initSchemaAndStatements(); err != nil {
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 

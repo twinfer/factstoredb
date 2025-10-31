@@ -65,7 +65,7 @@ func BenchmarkAdd(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		facts := prepareTestFacts(100000)
 		b.ResetTimer()
@@ -108,7 +108,7 @@ func BenchmarkAddDuplicate(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		base.Add(fact) // Add once
 		b.ResetTimer()
@@ -153,7 +153,7 @@ func BenchmarkContains(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		for _, f := range facts {
 			base.Add(f)
@@ -203,7 +203,7 @@ func BenchmarkRemove(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		for _, f := range facts {
 			base.Add(f)
@@ -257,7 +257,7 @@ func BenchmarkGetFactsAll(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		for _, f := range facts {
 			base.Add(f)
@@ -318,7 +318,7 @@ func BenchmarkGetFactsPartialMatch(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		for _, f := range facts {
 			base.Add(f)
@@ -389,7 +389,7 @@ func BenchmarkMerge(b *testing.B) {
 	b.Run("Postgres", func(b *testing.B) {
 		for b.Loop() {
 			b.StopTimer()
-			targetBase, _ := NewPostgresFactStore(connStr)
+			targetBase, _ := NewFactStorePostgreSQL(connStr)
 			b.StartTimer()
 			targetBase.Merge(&sourceBase)
 			targetBase.Close()
@@ -444,7 +444,7 @@ func BenchmarkMixedWorkload(b *testing.B) {
 	connStr := "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
 
 	b.Run("Postgres", func(b *testing.B) {
-		base, _ := NewPostgresFactStore(connStr)
+		base, _ := NewFactStorePostgreSQL(connStr)
 		defer base.Close()
 		patternAtom := evalAtom("fact(X, Y)")
 		b.ResetTimer()

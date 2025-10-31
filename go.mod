@@ -1,4 +1,4 @@
-module twinfer/factstoredb
+module github.com/twinfer/factstoredb
 
 go 1.25
 
